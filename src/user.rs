@@ -1,9 +1,8 @@
 use failure::Error;
-use reqwest::{Client, header, StatusCode};
+use reqwest::{Client, header, StatusCode, RedirectPolicy};
 use podcast::PocketcastPodcast;
 use error::PocketcastError;
 use cookie::Cookie;
-use regex::Regex;
 
 const LOGIN_URI: &str = "https://play.pocketcasts.com/users/sign_in";
 const GET_SUBSCRIPTIONS_URI: &str = "https://play.pocketcasts.com/web/podcasts/all.json";
@@ -33,27 +32,19 @@ impl PocketcastUser {
             ("[user]password", self.password.as_str())
         ];
 
-        let client = Client::new();
-        let mut res = client.post(LOGIN_URI)
+        let client = Client::builder()
+            .redirect(RedirectPolicy::none())
+            .build()?;
+        let res = client.post(LOGIN_URI)
             .form(&body)
             .send()?;
 
         if res.status() == StatusCode::Ok {
-            res.text()
-                .map_err(Error::from)
-                .and_then(|html| {
-                    println!("got html");
-                    println!("{}", html);
-                    let re = Regex::new(r#"<div id="flash_alert" class="alert alert-danger">(.*)</div>"#)?;
-                    println!("created regex");
-                    let caps = re.captures(&html).ok_or(PocketcastError::InvalidCredentials)?;
-                    println!("parsed html");
-                    Ok(caps[0].to_string())
-                })
-                .and_then(|msg| {
-                    println!("{}", msg);
-                    Err(Error::from(PocketcastError::InvalidCredentials))
-                })?;
+            Err(Error::from(PocketcastError::InvalidCredentials))?;
+        }
+
+        if res.status() != StatusCode::Found {
+            Err(Error::from(PocketcastError::HttpStatusError(res.status())))?;
         }
 
         let cookies = res.headers().get::<header::SetCookie>().ok_or(PocketcastError::MissingSession)?;

@@ -10,7 +10,6 @@ extern crate failure;
 extern crate rayon;
 extern crate reqwest;
 extern crate cookie;
-extern crate regex;
 
 mod user;
 mod episode;
