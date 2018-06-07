@@ -1,5 +1,5 @@
 [package]
-name = "pocketcasts-rs"
+name = "pocketcasts"
 version = "0.1.0"
 authors = ["Max <maxjoehnk@gmail.com>"]
 
