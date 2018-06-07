@@ -11,11 +11,15 @@ extern crate rayon;
 extern crate reqwest;
 extern crate cookie;
 
+mod client;
 mod user;
 mod episode;
 mod podcast;
 mod error;
+mod responses;
+mod api;
 
-pub use user::PocketcastUser;
-pub use podcast::PocketcastPodcast;
-pub use episode::PocketcastEpisode;
+pub use client::PocketcastClient;
+pub use user::User;
+pub use podcast::Podcast;
+pub use episode::Episode;

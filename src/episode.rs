@@ -1,5 +1,5 @@
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct PocketcastEpisode<> {
+pub struct Episode {
     pub uuid: String,
     pub size: i32,
     pub title: String,
