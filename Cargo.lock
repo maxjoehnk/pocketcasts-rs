@@ -545,7 +545,7 @@ version = "0.3.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
-name = "pocketcasts-rs"
+name = "pocketcasts"
 version = "0.1.0"
 dependencies = [
  "cookie 0.10.1 (registry+https://github.com/rust-lang/crates.io-index)",

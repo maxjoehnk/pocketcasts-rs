@@ -2,18 +2,9 @@
 pub struct Podcast {
     pub id: Option<i32>,
     pub uuid: String,
-    pub title: Option<String>,
-    pub author: Option<String>,
-    pub description: Option<String>,
+    pub title: String,
+    pub author: String,
+    pub description: String,
     pub url: Option<String>,
     pub thumbnail_url: Option<String>
-}
-
-impl Podcast {
-    pub fn new<S: Into<String>>(uuid: S) -> Podcast {
-        Podcast {
-            uuid: uuid.into(),
-            ..Podcast::default()
-        }
-    }
 }

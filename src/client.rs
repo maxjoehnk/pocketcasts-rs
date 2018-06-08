@@ -9,7 +9,7 @@ use serde_json::value::Value;
 use user::User;
 use api;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct PocketcastClient {
     user: User,
     session: Option<String>,
