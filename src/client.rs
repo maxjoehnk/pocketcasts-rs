@@ -111,6 +111,19 @@ impl PocketcastClient {
         Ok(res.result.episodes)
     }
 
+    pub fn search_podcasts<Q: Into<String>>(&self, query: Q) -> Result<Vec<Podcast>, Error> {
+        let query = vec![("term".to_string(), query.into())];
+        let mut res = self.get(api::SEARCH_PODCASTS_URI, Some(query))?;
+
+        if !res.status().is_success() {
+            return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
+        }
+
+        let res: SearchResponse = res.json()?;
+
+        Ok(res.podcasts)
+    }
+
     pub fn get_top_charts() -> Result<Vec<Podcast>, Error> {
         PocketcastClient::get_discover(api::GET_TOP_CHARTS_URI)
     }
@@ -136,6 +149,25 @@ impl PocketcastClient {
                 .send(),
             None => client
                 .post(url)
+                .header(cookies)
+                .send()
+        };
+        Ok(res?)
+    }
+
+    fn get(&self, url: &'static str, query: Option<Vec<(String, String)>>) -> Result<Response, Error> {
+        let client = Client::new();
+        let session = self.session.clone().ok_or(PocketcastError::NoSession)?;
+        let mut cookies = header::Cookie::new();
+        cookies.set("_social_session", session);
+        let res = match query {
+            Some(json) => client
+                .get(url)
+                .header(cookies)
+                .query(&json)
+                .send(),
+            None => client
+                .get(url)
                 .header(cookies)
                 .send()
         };
@@ -218,5 +250,12 @@ mod tests {
         let podcast = client.get_podcast("4f7ad040-8f5b-0135-9cea-5bb073f92b78").unwrap();
         let episodes = client.get_episodes(&podcast).unwrap();
         assert_ne!(episodes, vec![]);
+    }
+
+    #[test]
+    fn it_should_search_for_podcasts() {
+        let client = login().unwrap();
+        let podcasts = client.search_podcasts("Film Riot").unwrap();
+        assert_ne!(podcasts, vec![]);
     }
 }

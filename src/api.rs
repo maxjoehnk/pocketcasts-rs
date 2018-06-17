@@ -6,3 +6,4 @@ pub const LOGIN_URI: &str = "https://play.pocketcasts.com/users/sign_in";
 pub const GET_SUBSCRIPTIONS_URI: &str = "https://play.pocketcasts.com/web/podcasts/all.json";
 pub const GET_EPISODES_URI: &str = "https://play.pocketcasts.com/web/episodes/find_by_podcast.json";
 pub const GET_PODCAST_URI: &str = "https://play.pocketcasts.com/web/podcasts/podcast.json";
+pub const SEARCH_PODCASTS_URI: &str = "https://play.pocketcasts.com/web/podcasts/search.json";

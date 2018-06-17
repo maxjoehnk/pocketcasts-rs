@@ -34,3 +34,8 @@ pub struct DiscoverResponse {
 pub struct DiscoverResult {
     pub podcasts: Vec<Podcast>
 }
+
+#[derive(Debug, Deserialize)]
+pub struct SearchResponse {
+    pub podcasts: Vec<Podcast>
+}
