@@ -46,19 +46,19 @@ impl PocketcastClient {
             .form(&body)
             .send()?;
 
-        if res.status() == StatusCode::Ok {
+        if res.status() == StatusCode::OK {
             Err(Error::from(PocketcastError::InvalidCredentials))?;
         }
 
-        if res.status() != StatusCode::Found {
+        if res.status() != StatusCode::FOUND {
             Err(Error::from(PocketcastError::HttpStatusError(res.status())))?;
         }
 
-        let cookies = res.headers().get::<header::SetCookie>().ok_or(PocketcastError::MissingSession)?;
+        let cookies = res.headers().get_all(header::SET_COOKIE);
 
         let session = cookies
             .iter()
-            .map(|header| Cookie::parse(header.to_string()).unwrap())
+            .map(|header| Cookie::parse(header.to_str().unwrap()).unwrap())
             .find(|cookie| cookie.name() == "_social_session")
             .map(|cookie| cookie.value().to_string())
             .ok_or(PocketcastError::MissingSession)?;
@@ -139,17 +139,20 @@ impl PocketcastClient {
     fn post(&self, url: &'static str, body: Option<Value>) -> Result<Response, Error> {
         let client = Client::new();
         let session = self.session.clone().ok_or(PocketcastError::NoSession)?;
-        let mut cookies = header::Cookie::new();
-        cookies.set("_social_session", session);
+        let cookie = Cookie::build("_social_session", session).finish();
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::COOKIE, cookie.to_string().parse()?);
+
         let res = match body {
             Some(json) => client
                 .post(url)
-                .header(cookies)
+                .headers(headers)
                 .json(&json)
                 .send(),
             None => client
                 .post(url)
-                .header(cookies)
+                .headers(headers)
                 .send()
         };
         Ok(res?)
@@ -158,17 +161,20 @@ impl PocketcastClient {
     fn get(&self, url: &'static str, query: Option<Vec<(String, String)>>) -> Result<Response, Error> {
         let client = Client::new();
         let session = self.session.clone().ok_or(PocketcastError::NoSession)?;
-        let mut cookies = header::Cookie::new();
-        cookies.set("_social_session", session);
+        let cookie = Cookie::build("_social_session", session).finish();
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(reqwest::header::COOKIE, cookie.to_string().parse()?);
+
         let res = match query {
             Some(json) => client
                 .get(url)
-                .header(cookies)
+                .headers(headers)
                 .query(&json)
                 .send(),
             None => client
                 .get(url)
-                .header(cookies)
+                .headers(headers)
                 .send()
         };
         Ok(res?)
