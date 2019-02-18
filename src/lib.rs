@@ -18,5 +18,6 @@ mod api;
 
 pub use client::PocketcastClient;
 pub use user::User;
-pub use podcast::Podcast;
+pub use podcast::{Podcast, DiscoverPodcast};
 pub use episode::Episode;
+pub use responses::SearchPodcast;

@@ -1,9 +1,8 @@
-use cookie::Cookie;
 use episode::Episode;
 use error::PocketcastError;
 use failure::Error;
-use podcast::Podcast;
-use reqwest::{Client, header, RedirectPolicy, Response, StatusCode};
+use podcast::{DiscoverPodcast, Podcast};
+use reqwest::{Client, Response, StatusCode};
 use responses::*;
 use serde_json::value::Value;
 use user::User;
@@ -12,7 +11,13 @@ use api;
 #[derive(Debug, Default, Clone)]
 pub struct PocketcastClient {
     user: User,
-    session: Option<String>,
+    token: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct LoginResponseBody {
+    token: String,
+    uuid: String
 }
 
 impl PocketcastClient {
@@ -34,42 +39,34 @@ impl PocketcastClient {
     }
 
     pub fn login(&mut self) -> Result<(), Error> {
-        let body = [
-            ("[user]email", self.user.email.as_str()),
-            ("[user]password", self.user.password.as_str())
-        ];
+        let body = json!({
+            "email": self.user.email.clone(),
+            "password": self.user.password.clone(),
+            "scope": "webplayer"
+        });
 
-        let client = Client::builder()
-            .redirect(RedirectPolicy::none())
-            .build()?;
-        let res = client.post(api::LOGIN_URI)
-            .form(&body)
-            .send()?;
+        let mut res = self.post(api::LOGIN_URI, Some(body))?;
 
-        if res.status() == StatusCode::OK {
+        if res.status() == StatusCode::UNAUTHORIZED {
             Err(Error::from(PocketcastError::InvalidCredentials))?;
         }
 
-        if res.status() != StatusCode::FOUND {
+        if !res.status().is_success() {
             Err(Error::from(PocketcastError::HttpStatusError(res.status())))?;
         }
 
-        let cookies = res.headers().get_all(header::SET_COOKIE);
+        let res: LoginResponseBody = res.json()?;
 
-        let session = cookies
-            .iter()
-            .map(|header| Cookie::parse(header.to_str().unwrap()).unwrap())
-            .find(|cookie| cookie.name() == "_social_session")
-            .map(|cookie| cookie.value().to_string())
-            .ok_or(PocketcastError::MissingSession)?;
-
-        self.session = Some(session);
+        self.token = Some(res.token);
 
         Ok(())
     }
 
     pub fn get_subscriptions(&self) -> Result<Vec<Podcast>, Error> {
-        let mut res = self.post(api::GET_SUBSCRIPTIONS_URI, None)?;
+        let body = json!({
+            "v": 1
+        });
+        let mut res = self.post(api::GET_SUBSCRIPTIONS_URI, Some(body))?;
 
         if !res.status().is_success() {
             return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
@@ -80,27 +77,9 @@ impl PocketcastClient {
         Ok(res.podcasts)
     }
 
-    pub fn get_podcast<S: Into<String>>(&self, uuid: S) -> Result<Podcast, Error> {
-        let body = json!({
-            "uuid": uuid.into()
-        });
-        let mut res = self.post(api::GET_PODCAST_URI, Some(body))?;
-
-        if !res.status().is_success() {
-            return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
-        }
-
-        let res: PodcastResponse = res.json()?;
-
-        Ok(res.podcast)
-    }
-
-    pub fn get_episodes(&self, podcast: &Podcast) -> Result<Vec<Episode>, Error> {
-        let body = json!({
-            "uuid": podcast.uuid,
-            "page": 1
-        });
-        let mut res = self.post(api::GET_EPISODES_URI, Some(body))?;
+    pub fn get_episodes(&self, podcast_id: &str) -> Result<Vec<Episode>, Error> {
+        let url = format!("{}/{}/{}", api::GET_EPISODES_URI_PREFIX, podcast_id, api::GET_EPISODES_URI_SUFFIX);
+        let mut res = self.get(&url, None)?;
 
         if !res.status().is_success() {
             return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
@@ -108,12 +87,12 @@ impl PocketcastClient {
 
         let res: EpisodesResponse = res.json()?;
 
-        Ok(res.result.episodes)
+        Ok(res.podcast.episodes)
     }
 
-    pub fn search_podcasts<Q: Into<String>>(&self, query: Q) -> Result<Vec<Podcast>, Error> {
-        let query = vec![("term".to_string(), query.into())];
-        let mut res = self.get(api::SEARCH_PODCASTS_URI, Some(query))?;
+    pub fn search_podcasts<Q: Into<String>>(&self, query: Q) -> Result<Vec<SearchPodcast>, Error> {
+        let body = json!({ "term": query.into() });
+        let mut res = self.post(api::SEARCH_PODCASTS_URI, Some(body))?;
 
         if !res.status().is_success() {
             return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
@@ -124,63 +103,54 @@ impl PocketcastClient {
         Ok(res.podcasts)
     }
 
-    pub fn get_top_charts() -> Result<Vec<Podcast>, Error> {
+    pub fn get_top_charts() -> Result<Vec<DiscoverPodcast>, Error> {
         PocketcastClient::get_discover(api::GET_TOP_CHARTS_URI)
     }
 
-    pub fn get_featured() -> Result<Vec<Podcast>, Error> {
+    pub fn get_featured() -> Result<Vec<DiscoverPodcast>, Error> {
         PocketcastClient::get_discover(api::GET_FEATURED_URI)
     }
 
-    pub fn get_trending() -> Result<Vec<Podcast>, Error> {
+    pub fn get_trending() -> Result<Vec<DiscoverPodcast>, Error> {
         PocketcastClient::get_discover(api::GET_TRENDING_URI)
     }
 
     fn post(&self, url: &'static str, body: Option<Value>) -> Result<Response, Error> {
         let client = Client::new();
-        let session = self.session.clone().ok_or(PocketcastError::NoSession)?;
-        let cookie = Cookie::build("_social_session", session).finish();
 
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(reqwest::header::COOKIE, cookie.to_string().parse()?);
+        let mut request_builder = client.post(url);
+        if let Some(ref token) = self.token {
+            request_builder = request_builder.bearer_auth(token);
+        }
 
         let res = match body {
-            Some(json) => client
-                .post(url)
-                .headers(headers)
+            Some(json) => request_builder
                 .json(&json)
                 .send(),
-            None => client
-                .post(url)
-                .headers(headers)
-                .send()
+            None => request_builder.send()
         };
         Ok(res?)
     }
 
-    fn get(&self, url: &'static str, query: Option<Vec<(String, String)>>) -> Result<Response, Error> {
+    fn get(&self, url: &str, query: Option<Vec<(String, String)>>) -> Result<Response, Error> {
         let client = Client::new();
-        let session = self.session.clone().ok_or(PocketcastError::NoSession)?;
-        let cookie = Cookie::build("_social_session", session).finish();
 
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert(reqwest::header::COOKIE, cookie.to_string().parse()?);
+        let mut request_builder = client.get(url);
+        if let Some(ref token) = self.token {
+            request_builder = request_builder.bearer_auth(token);
+        }
 
         let res = match query {
-            Some(json) => client
-                .get(url)
-                .headers(headers)
+            Some(json) => request_builder
                 .query(&json)
                 .send(),
-            None => client
-                .get(url)
-                .headers(headers)
+            None => request_builder
                 .send()
         };
         Ok(res?)
     }
 
-    fn get_discover(uri: &'static str) -> Result<Vec<Podcast>, Error> {
+    fn get_discover(uri: &'static str) -> Result<Vec<DiscoverPodcast>, Error> {
         let client = Client::new();
         let mut res = client
             .get(uri)
@@ -216,7 +186,7 @@ mod tests {
     #[test]
     fn it_logs_in() {
         let client = login().unwrap();
-        assert_ne!(client.session, None);
+        assert_ne!(client.token, None);
     }
 
     #[test]
@@ -245,16 +215,9 @@ mod tests {
     }
 
     #[test]
-    fn it_should_fetch_a_podcast() {
-        let client = login().unwrap();
-        let _podcast = client.get_podcast("4f7ad040-8f5b-0135-9cea-5bb073f92b78").unwrap();
-    }
-
-    #[test]
     fn it_should_fetch_podcast_episodes() {
         let client = login().unwrap();
-        let podcast = client.get_podcast("4f7ad040-8f5b-0135-9cea-5bb073f92b78").unwrap();
-        let episodes = client.get_episodes(&podcast).unwrap();
+        let episodes = client.get_episodes("4f7ad040-8f5b-0135-9cea-5bb073f92b78").unwrap();
         assert_ne!(episodes, vec![]);
     }
 
