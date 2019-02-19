@@ -56,6 +56,6 @@ pub struct SearchPodcast {
 
 impl SearchPodcast {
     pub fn thumbnail_url(&self) -> String {
-        format!("https://static2.pocketcasts.com/discover/images/webp/200/{}.webp", self.uuid)
+        format!("https://static2.pocketcasts.com/discover/images/400/{}.jpg", self.uuid)
     }
 }
