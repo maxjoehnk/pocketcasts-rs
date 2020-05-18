@@ -1,12 +1,15 @@
 [package]
 name = "pocketcasts"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Max <maxjoehnk@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 failure = "0.1"
-serde = "1.0"
-serde_json = "1.0"
-serde_derive = "1.0"
-reqwest = "0.9"
-cookie = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+reqwest = { version = "0.10", features = ["json"] }
+serde_json = "1"
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["rt-threaded", "macros"] }
+

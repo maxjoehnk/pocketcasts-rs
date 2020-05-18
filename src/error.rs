@@ -1,3 +1,4 @@
+use failure::Fail;
 use reqwest::StatusCode;
 
 #[derive(Fail, Debug)]

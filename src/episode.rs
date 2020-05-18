@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct Episode {
     pub uuid: String,

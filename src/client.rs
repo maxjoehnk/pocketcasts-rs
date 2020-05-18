@@ -1,17 +1,15 @@
-use episode::Episode;
-use error::PocketcastError;
+use crate::episode::Episode;
+use crate::error::PocketcastError;
 use failure::Error;
-use podcast::{DiscoverPodcast, Podcast};
-use reqwest::{Client, Response, StatusCode};
-use responses::*;
-use serde_json::value::Value;
-use user::User;
-use api;
+use crate::podcast::{DiscoverPodcast, Podcast};
+use reqwest::{Client, Response, StatusCode, ClientBuilder, redirect::Policy};
+use crate::responses::*;
+use crate::api;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct PocketcastClient {
-    user: User,
-    token: Option<String>,
+    token: String
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -20,32 +18,49 @@ struct LoginResponseBody {
     uuid: String
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct LoginRequest {
+    email: String,
+    password: String,
+    scope: LoginScope
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum LoginScope {
+    Webplayer
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct Version {
+    #[serde(rename = "v")]
+    version: usize
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SearchRequest {
+    term: String
+}
+
 impl PocketcastClient {
-    pub fn new<S: Into<String>>(email: S, password: S) -> PocketcastClient {
+    pub fn new(token: String) -> PocketcastClient {
         PocketcastClient {
-            user: User {
-                email: email.into(),
-                password: password.into(),
-            },
-            ..PocketcastClient::default()
+            token
         }
     }
 
-    pub fn with_user(user: User) -> PocketcastClient {
-        PocketcastClient {
-            user,
-            ..PocketcastClient::default()
-        }
-    }
+    pub async fn login(email: String, password: String) -> Result<Self, Error> {
+        let body = LoginRequest {
+            email,
+            password,
+            scope: LoginScope::Webplayer
+        };
+        let client = Client::new();
 
-    pub fn login(&mut self) -> Result<(), Error> {
-        let body = json!({
-            "email": self.user.email.clone(),
-            "password": self.user.password.clone(),
-            "scope": "webplayer"
-        });
-
-        let mut res = self.post(api::LOGIN_URI, Some(body))?;
+        let res = client.post(api::LOGIN_URI)
+            .json(&body)
+            .send()
+            .await?;
 
         if res.status() == StatusCode::UNAUTHORIZED {
             Err(Error::from(PocketcastError::InvalidCredentials))?;
@@ -55,73 +70,69 @@ impl PocketcastClient {
             Err(Error::from(PocketcastError::HttpStatusError(res.status())))?;
         }
 
-        let res: LoginResponseBody = res.json()?;
+        let res: LoginResponseBody = res.json().await?;
 
-        self.token = Some(res.token);
-
-        Ok(())
+        Ok(PocketcastClient {
+            token: res.token
+        })
     }
 
-    pub fn get_subscriptions(&self) -> Result<Vec<Podcast>, Error> {
-        let body = json!({
-            "v": 1
-        });
-        let mut res = self.post(api::GET_SUBSCRIPTIONS_URI, Some(body))?;
+    pub async fn get_subscriptions(&self) -> Result<Vec<Podcast>, Error> {
+        let body = Version { version: 1 };
+        let res = self.post(api::GET_SUBSCRIPTIONS_URI, Some(body)).await?;
 
         if !res.status().is_success() {
             return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
         }
 
-        let res: SubscriptionsResponse = res.json()?;
+        let res: SubscriptionsResponse = res.json().await?;
 
         Ok(res.podcasts)
     }
 
-    pub fn get_episodes(&self, podcast_id: &str) -> Result<Vec<Episode>, Error> {
-        let url = format!("{}/{}/{}", api::GET_EPISODES_URI_PREFIX, podcast_id, api::GET_EPISODES_URI_SUFFIX);
-        let mut res = self.get(&url, None)?;
+    pub async fn get_episodes(&self, podcast_id: &str) -> Result<Vec<Episode>, Error> {
+        let url = format!("{}/{}/{}.json", api::GET_EPISODES_URI_PREFIX, podcast_id, api::GET_EPISODES_URI_SUFFIX);
+        let res = self.get(&url, None).await?;
 
         if !res.status().is_success() {
             return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
         }
 
-        let res: EpisodesResponse = res.json()?;
+        let res: EpisodesResponse = res.json().await?;
 
         Ok(res.podcast.episodes)
     }
 
-    pub fn search_podcasts<Q: Into<String>>(&self, query: Q) -> Result<Vec<SearchPodcast>, Error> {
-        let body = json!({ "term": query.into() });
-        let mut res = self.post(api::SEARCH_PODCASTS_URI, Some(body))?;
+    pub async fn search_podcasts<Q: Into<String>>(&self, query: Q) -> Result<Vec<SearchPodcast>, Error> {
+        let body = SearchRequest { term: query.into() };
+        let res = self.post(api::SEARCH_PODCASTS_URI, Some(body)).await?;
 
         if !res.status().is_success() {
             return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
         }
 
-        let res: SearchResponse = res.json()?;
+        let res: SearchResponse = res.json().await?;
 
         Ok(res.podcasts)
     }
 
-    pub fn get_top_charts() -> Result<Vec<DiscoverPodcast>, Error> {
-        PocketcastClient::get_discover(api::GET_TOP_CHARTS_URI)
+    pub async fn get_top_charts() -> Result<Vec<DiscoverPodcast>, Error> {
+        PocketcastClient::get_discover(api::GET_TOP_CHARTS_URI).await
     }
 
-    pub fn get_featured() -> Result<Vec<DiscoverPodcast>, Error> {
-        PocketcastClient::get_discover(api::GET_FEATURED_URI)
+    pub async fn get_featured() -> Result<Vec<DiscoverPodcast>, Error> {
+        PocketcastClient::get_discover(api::GET_FEATURED_URI).await
     }
 
-    pub fn get_trending() -> Result<Vec<DiscoverPodcast>, Error> {
-        PocketcastClient::get_discover(api::GET_TRENDING_URI)
+    pub async fn get_trending() -> Result<Vec<DiscoverPodcast>, Error> {
+        PocketcastClient::get_discover(api::GET_TRENDING_URI).await
     }
 
-    fn post(&self, url: &'static str, body: Option<Value>) -> Result<Response, Error> {
+    async fn post<TReq>(&self, url: &'static str, body: Option<TReq>) -> Result<Response, Error>
+        where TReq: Serialize {
         let client = Client::new();
 
-        let mut request_builder = client.post(url);
-        if let Some(ref token) = self.token {
-            request_builder = request_builder.bearer_auth(token);
-        }
+        let request_builder = client.post(url).bearer_auth(&self.token);
 
         let res = match body {
             Some(json) => request_builder
@@ -129,16 +140,13 @@ impl PocketcastClient {
                 .send(),
             None => request_builder.send()
         };
-        Ok(res?)
+        Ok(res.await?)
     }
 
-    fn get(&self, url: &str, query: Option<Vec<(String, String)>>) -> Result<Response, Error> {
+    async fn get(&self, url: &str, query: Option<Vec<(String, String)>>) -> Result<Response, Error> {
         let client = Client::new();
 
-        let mut request_builder = client.get(url);
-        if let Some(ref token) = self.token {
-            request_builder = request_builder.bearer_auth(token);
-        }
+        let request_builder = client.get(url).bearer_auth(&self.token);
 
         let res = match query {
             Some(json) => request_builder
@@ -147,20 +155,21 @@ impl PocketcastClient {
             None => request_builder
                 .send()
         };
-        Ok(res?)
+        Ok(res.await?)
     }
 
-    fn get_discover(uri: &'static str) -> Result<Vec<DiscoverPodcast>, Error> {
+    async fn get_discover(uri: &'static str) -> Result<Vec<DiscoverPodcast>, Error> {
         let client = Client::new();
-        let mut res = client
+        let res = client
             .get(uri)
-            .send()?;
+            .send()
+            .await?;
 
         if !res.status().is_success() {
             return Err(Error::from(PocketcastError::HttpStatusError(res.status())));
         }
 
-        let res: DiscoverResponse = res.json()?;
+        let res: DiscoverResponse = res.json().await?;
 
         Ok(res.result.ok_or(PocketcastError::EmptyResponse).map(|result| result.podcasts)?)
     }
@@ -169,62 +178,54 @@ impl PocketcastClient {
 #[cfg(test)]
 mod tests {
     use failure::Error;
-    use User;
     use super::*;
 
-    fn create_user() -> User {
-        User::new(env!("POCKETCAST_EMAIL"), env!("POCKETCAST_PASSWORD"))
+    async fn login() -> Result<PocketcastClient, Error> {
+        PocketcastClient::login(env!("POCKETCAST_EMAIL").to_string(), env!("POCKETCAST_PASSWORD").to_string()).await
     }
 
-    fn login() -> Result<PocketcastClient, Error> {
-        let user = create_user();
-        let mut client = PocketcastClient::with_user(user);
-        client.login()?;
-        Ok(client)
+    #[tokio::test]
+    async fn it_logs_in() {
+        let client = login().await;
+        assert_eq!(client.is_ok(), true);
     }
 
-    #[test]
-    fn it_logs_in() {
-        let client = login().unwrap();
-        assert_ne!(client.token, None);
-    }
-
-    #[test]
-    fn it_should_fetch_subscriptions() {
-        let client = login().unwrap();
-        let subscriptions = client.get_subscriptions().unwrap();
+    #[tokio::test]
+    async fn it_should_fetch_subscriptions() {
+        let client = login().await.unwrap();
+        let subscriptions = client.get_subscriptions().await.unwrap();
         assert_ne!(subscriptions, vec![]);
     }
 
-    #[test]
-    fn it_should_fetch_top_charts() {
-        let charts = PocketcastClient::get_top_charts().unwrap();
+    #[tokio::test]
+    async fn it_should_fetch_top_charts() {
+        let charts = PocketcastClient::get_top_charts().await.unwrap();
         assert_ne!(charts, vec![]);
     }
 
-    #[test]
-    fn it_should_fetch_featured() {
-        let charts = PocketcastClient::get_featured().unwrap();
+    #[tokio::test]
+    async fn it_should_fetch_featured() {
+        let charts = PocketcastClient::get_featured().await.unwrap();
         assert_ne!(charts, vec![]);
     }
 
-    #[test]
-    fn it_should_fetch_trending() {
-        let charts = PocketcastClient::get_trending().unwrap();
+    #[tokio::test]
+    async fn it_should_fetch_trending() {
+        let charts = PocketcastClient::get_trending().await.unwrap();
         assert_ne!(charts, vec![]);
     }
 
-    #[test]
-    fn it_should_fetch_podcast_episodes() {
-        let client = login().unwrap();
-        let episodes = client.get_episodes("4f7ad040-8f5b-0135-9cea-5bb073f92b78").unwrap();
+    #[tokio::test]
+    async fn it_should_fetch_podcast_episodes() {
+        let client = login().await.unwrap();
+        let episodes = client.get_episodes("c55316c0-d9ab-0136-3249-08b04944ede4").await.unwrap();
         assert_ne!(episodes, vec![]);
     }
 
-    #[test]
-    fn it_should_search_for_podcasts() {
-        let client = login().unwrap();
-        let podcasts = client.search_podcasts("Film Riot").unwrap();
+    #[tokio::test]
+    async fn it_should_search_for_podcasts() {
+        let client = login().await.unwrap();
+        let podcasts = client.search_podcasts("Film Riot").await.unwrap();
         assert_ne!(podcasts, vec![]);
     }
 }

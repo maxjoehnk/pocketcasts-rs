@@ -1,5 +1,6 @@
-use Episode;
-use {Podcast, DiscoverPodcast};
+use serde::{Serialize, Deserialize};
+use crate::Episode;
+use crate::{Podcast, DiscoverPodcast};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EpisodesResponse {

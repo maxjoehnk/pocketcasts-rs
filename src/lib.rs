@@ -1,23 +1,11 @@
-extern crate serde;
-#[macro_use]
-extern crate serde_derive;
-#[macro_use]
-extern crate serde_json;
-#[macro_use]
-extern crate failure;
-extern crate reqwest;
-extern crate cookie;
-
 mod client;
-mod user;
 mod episode;
 mod podcast;
 mod error;
 mod responses;
 mod api;
 
-pub use client::PocketcastClient;
-pub use user::User;
-pub use podcast::{Podcast, DiscoverPodcast};
-pub use episode::Episode;
-pub use responses::SearchPodcast;
+pub use self::client::PocketcastClient;
+pub use self::podcast::{Podcast, DiscoverPodcast};
+pub use self::episode::Episode;
+pub use self::responses::SearchPodcast;
