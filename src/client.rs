@@ -1,11 +1,13 @@
+use failure::Error;
+use reqwest::{Client, Response, StatusCode};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
+
+use crate::api;
 use crate::episode::Episode;
 use crate::error::PocketcastError;
-use failure::Error;
 use crate::podcast::{DiscoverPodcast, Podcast};
-use reqwest::{Client, Response, StatusCode, ClientBuilder, redirect::Policy};
 use crate::responses::*;
-use crate::api;
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone)]
 pub struct PocketcastClient {
@@ -90,7 +92,7 @@ impl PocketcastClient {
         Ok(res.podcasts)
     }
 
-    pub async fn get_episodes(&self, podcast_id: &str) -> Result<Vec<Episode>, Error> {
+    pub async fn get_episodes(&self, podcast_id: Uuid) -> Result<Vec<Episode>, Error> {
         let url = format!("{}/{}/{}.json", api::GET_EPISODES_URI_PREFIX, podcast_id, api::GET_EPISODES_URI_SUFFIX);
         let res = self.get(&url, None).await?;
 
@@ -178,6 +180,7 @@ impl PocketcastClient {
 #[cfg(test)]
 mod tests {
     use failure::Error;
+
     use super::*;
 
     async fn login() -> Result<PocketcastClient, Error> {
@@ -218,7 +221,7 @@ mod tests {
     #[tokio::test]
     async fn it_should_fetch_podcast_episodes() {
         let client = login().await.unwrap();
-        let episodes = client.get_episodes("c55316c0-d9ab-0136-3249-08b04944ede4").await.unwrap();
+        let episodes = client.get_episodes(uuid::Uuid::parse_str("c55316c0-d9ab-0136-3249-08b04944ede4").unwrap()).await.unwrap();
         assert_ne!(episodes, vec![]);
     }
 

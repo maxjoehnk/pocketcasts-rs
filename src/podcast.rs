@@ -1,9 +1,10 @@
 use serde::{Serialize, Deserialize};
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 #[serde(rename_all="camelCase")]
 pub struct Podcast {
-    pub uuid: String,
+    pub uuid: Uuid,
     pub title: String,
     pub author: String,
     pub description: String,
@@ -12,7 +13,7 @@ pub struct Podcast {
     pub episodes_sort_order: u32,
     pub last_epsiode_archived: Option<bool>,
     pub last_episode_published: String,
-    pub last_episode_uuid: String,
+    pub last_episode_uuid: Uuid,
     pub unplayed: bool
 }
 
@@ -25,7 +26,7 @@ impl Podcast {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Default)]
 pub struct DiscoverPodcast {
     pub id: Option<i32>,
-    pub uuid: String,
+    pub uuid: Uuid,
     pub title: String,
     pub author: String,
     pub description: String,
